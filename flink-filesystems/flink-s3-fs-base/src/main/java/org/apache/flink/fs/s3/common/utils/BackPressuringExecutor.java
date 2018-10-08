@@ -33,7 +33,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  * An executor decorator that allows only a certain number of concurrent executions.
  * The {@link #execute(Runnable)} method blocks once that number of executions is exceeded.
  */
-public class BackPressuringExecutor implements Executor {
+public final class BackPressuringExecutor implements Executor {
 
 	/** The executor for the actual execution. */
 	private final Executor delegate;

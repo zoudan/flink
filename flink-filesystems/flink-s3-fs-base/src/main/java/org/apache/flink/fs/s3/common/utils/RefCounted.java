@@ -30,6 +30,9 @@ public interface RefCounted {
 
 	/**
 	 * Decreases the reference counter.
+	 *
+	 * @return {@code true} if the reference
+	 * counter reached 0, {@code false} otherwise.
 	 */
 	boolean release();
 }

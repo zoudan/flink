@@ -48,7 +48,8 @@ public class RefCountedBufferingFileStream extends RefCountedFSOutputStream {
 
 	private boolean closed;
 
-	RefCountedBufferingFileStream(
+	@VisibleForTesting
+	public RefCountedBufferingFileStream(
 			final RefCountedFile file,
 			final int bufferSize) {
 
@@ -142,9 +143,24 @@ public class RefCountedBufferingFileStream extends RefCountedFSOutputStream {
 		}
 	}
 
+	@Override
+	public String toString() {
+		return "Reference Counted File with {" +
+				"path=\'" + currentTmpFile.getFile().toPath().toAbsolutePath() + "\'" +
+				", size=" + getPos() +
+				", reference counter=" + currentTmpFile.getReferenceCounter() +
+				", closed=" + closed +
+				'}';
+	}
+
 	@VisibleForTesting
 	int getPositionInBuffer() {
 		return positionInBuffer;
+	}
+
+	@VisibleForTesting
+	public int getReferenceCounter() {
+		return currentTmpFile.getReferenceCounter();
 	}
 
 	// ------------------------- Factory Methods -------------------------
