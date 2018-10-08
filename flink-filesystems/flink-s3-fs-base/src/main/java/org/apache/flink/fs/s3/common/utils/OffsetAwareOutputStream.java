@@ -18,6 +18,7 @@
 
 package org.apache.flink.fs.s3.common.utils;
 
+import org.apache.flink.annotation.Internal;
 import org.apache.flink.util.IOUtils;
 
 import java.io.Closeable;
@@ -29,6 +30,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 /**
  * An {@link OutputStream} that keeps track of its current length.
  */
+@Internal
 public final class OffsetAwareOutputStream implements Closeable {
 
 	private final OutputStream currentOut;

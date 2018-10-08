@@ -18,9 +18,12 @@
 
 package org.apache.flink.fs.s3.common.utils;
 
+import org.apache.flink.annotation.Internal;
+
 /**
  * Interface to simply add reference counting functionality.
  */
+@Internal
 public interface RefCounted {
 
 	/**

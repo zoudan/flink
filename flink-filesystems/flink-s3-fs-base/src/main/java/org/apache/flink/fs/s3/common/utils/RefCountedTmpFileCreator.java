@@ -18,6 +18,7 @@
 
 package org.apache.flink.fs.s3.common.utils;
 
+import org.apache.flink.annotation.Internal;
 import org.apache.flink.util.function.FunctionWithException;
 
 import java.io.File;
@@ -35,6 +36,7 @@ import static org.apache.flink.util.Preconditions.checkArgument;
 /**
  * A utility class that creates local {@link RefCountedFile reference counted files} that serve as temporary files.
  */
+@Internal
 public class RefCountedTmpFileCreator implements FunctionWithException<File, RefCountedFile, IOException> {
 
 	private final File[] tempDirectories;

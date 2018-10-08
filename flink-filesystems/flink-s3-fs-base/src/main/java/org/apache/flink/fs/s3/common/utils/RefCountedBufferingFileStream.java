@@ -18,6 +18,7 @@
 
 package org.apache.flink.fs.s3.common.utils;
 
+import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.util.function.FunctionWithException;
 
@@ -34,6 +35,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  * A {@link RefCountedFile} that also uses an in-memory buffer for buffering small writes.
  * This is done to avoid frequent 'flushes' of the file stream to disk.
  */
+@Internal
 public class RefCountedBufferingFileStream extends RefCountedFSOutputStream {
 
 	public static final int BUFFER_SIZE = 4096;

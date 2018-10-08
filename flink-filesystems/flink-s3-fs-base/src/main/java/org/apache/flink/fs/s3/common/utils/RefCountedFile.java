@@ -18,6 +18,7 @@
 
 package org.apache.flink.fs.s3.common.utils;
 
+import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.IOUtils;
@@ -34,6 +35,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  * A reference counted file which is deleted as soon as no caller
  * holds a reference to the wrapped {@link File}.
  */
+@Internal
 public class RefCountedFile implements RefCounted {
 
 	private final File file;

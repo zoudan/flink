@@ -18,6 +18,7 @@
 
 package org.apache.flink.fs.s3.common.utils;
 
+import org.apache.flink.annotation.Internal;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkRuntimeException;
 
@@ -33,6 +34,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  * An executor decorator that allows only a certain number of concurrent executions.
  * The {@link #execute(Runnable)} method blocks once that number of executions is exceeded.
  */
+@Internal
 public final class BackPressuringExecutor implements Executor {
 
 	/** The executor for the actual execution. */

@@ -18,6 +18,7 @@
 
 package org.apache.flink.fs.s3.common.utils;
 
+import org.apache.flink.annotation.Internal;
 import org.apache.flink.core.fs.FSDataOutputStream;
 
 import java.io.IOException;
@@ -26,6 +27,7 @@ import java.io.InputStream;
 /**
  * A {@link FSDataOutputStream} with the {@link RefCounted} functionality.
  */
+@Internal
 public abstract class RefCountedFSOutputStream extends FSDataOutputStream implements RefCounted {
 
 	/**
