@@ -17,11 +17,7 @@
 # limitations under the License.
 ################################################################################
 
-source "$(dirname "$0")"/common.sh
-
-DOCKER_MODULE_DIR=${END_TO_END_DIR}/../flink-container/docker
-KUBERNETES_MODULE_DIR=${END_TO_END_DIR}/../flink-container/kubernetes
-CONTAINER_SCRIPTS=${END_TO_END_DIR}/test-scripts/container-scripts
+source "$(dirname "$0")"/common_kubernetes.sh
 
 export FLINK_JOB=org.apache.flink.examples.java.wordcount.WordCount
 export FLINK_IMAGE_NAME=test_kubernetes_embedded_job
@@ -34,16 +30,15 @@ function cleanup {
     kubectl delete job flink-job-cluster
     kubectl delete service flink-job-cluster
     kubectl delete deployment flink-task-manager
-    rm -rf ${OUTPUT_VOLUME}
+    stop_kubernetes
 }
 
-trap cleanup EXIT
+start_kubernetes
 
 mkdir -p $OUTPUT_VOLUME
 
-eval $(minikube docker-env)
 cd "$DOCKER_MODULE_DIR"
-./build.sh --from-local-dist --job-jar ${FLINK_DIR}/examples/batch/WordCount.jar --image-name ${FLINK_IMAGE_NAME}
+./build.sh --from-local-dist --job-artifacts ${FLINK_DIR}/examples/batch/WordCount.jar --image-name ${FLINK_IMAGE_NAME}
 cd "$END_TO_END_DIR"
 
 
@@ -53,4 +48,4 @@ envsubst '${FLINK_IMAGE_NAME} ${FLINK_JOB_PARALLELISM}' < ${CONTAINER_SCRIPTS}/t
 kubectl wait --for=condition=complete job/flink-job-cluster --timeout=1h
 kubectl cp `kubectl get pods | awk '/task-manager/ {print $1}'`:/cache/${OUTPUT_FILE} ${OUTPUT_VOLUME}/${OUTPUT_FILE}
 
-check_result_hash "WordCount" ${OUTPUT_VOLUME}/${OUTPUT_FILE} "e682ec6622b5e83f2eb614617d5ab2cf"
+check_result_hash "WordCount" ${OUTPUT_VOLUME}/${OUTPUT_FILE} "${RESULT_HASH}"

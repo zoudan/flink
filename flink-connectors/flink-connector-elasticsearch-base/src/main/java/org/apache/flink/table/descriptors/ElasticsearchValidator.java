@@ -18,19 +18,31 @@
 
 package org.apache.flink.table.descriptors;
 
+import org.apache.flink.annotation.Internal;
+import org.apache.flink.streaming.connectors.elasticsearch.ElasticsearchUpsertTableSinkBase.Host;
+import org.apache.flink.table.api.ValidationException;
+import org.apache.flink.util.StringUtils;
+
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+
+import static org.apache.flink.table.descriptors.DescriptorProperties.noValidation;
 
 /**
  * The validator for {@link Elasticsearch}.
  */
+@Internal
 public class ElasticsearchValidator extends ConnectorDescriptorValidator {
 
 	public static final String CONNECTOR_TYPE_VALUE_ELASTICSEARCH = "elasticsearch";
 	public static final String CONNECTOR_VERSION_VALUE_6 = "6";
+	public static final String CONNECTOR_VERSION_VALUE_7 = "7";
 	public static final String CONNECTOR_HOSTS = "connector.hosts";
 	public static final String CONNECTOR_HOSTS_HOSTNAME = "hostname";
 	public static final String CONNECTOR_HOSTS_PORT = "port";
@@ -61,7 +73,7 @@ public class ElasticsearchValidator extends ConnectorDescriptorValidator {
 	@Override
 	public void validate(DescriptorProperties properties) {
 		super.validate(properties);
-		properties.validateValue(CONNECTOR_TYPE(), CONNECTOR_TYPE_VALUE_ELASTICSEARCH, false);
+		properties.validateValue(CONNECTOR_TYPE, CONNECTOR_TYPE_VALUE_ELASTICSEARCH, false);
 		validateVersion(properties);
 		validateHosts(properties);
 		validateGeneralProperties(properties);
@@ -72,22 +84,22 @@ public class ElasticsearchValidator extends ConnectorDescriptorValidator {
 
 	private void validateVersion(DescriptorProperties properties) {
 		properties.validateEnumValues(
-			CONNECTOR_VERSION(),
+			CONNECTOR_VERSION,
 			false,
-			Collections.singletonList(CONNECTOR_VERSION_VALUE_6));
+			Arrays.asList(CONNECTOR_VERSION_VALUE_6, CONNECTOR_VERSION_VALUE_7));
 	}
 
 	private void validateHosts(DescriptorProperties properties) {
-		final Map<String, Consumer<String>> hostsValidators = new HashMap<>();
-		hostsValidators.put(
-			CONNECTOR_HOSTS_HOSTNAME,
-			(prefix) -> properties.validateString(prefix + CONNECTOR_HOSTS_HOSTNAME, false, 1));
-		hostsValidators.put(
-			CONNECTOR_HOSTS_PORT,
-			(prefix) -> properties.validateInt(prefix + CONNECTOR_HOSTS_PORT, false, 0, 65535));
-		hostsValidators.put(CONNECTOR_HOSTS_PROTOCOL,
-			(prefix) -> properties.validateString(prefix + CONNECTOR_HOSTS_PROTOCOL, false, 1));
-		properties.validateFixedIndexedProperties(CONNECTOR_HOSTS, false, hostsValidators);
+		if (properties.containsKey(CONNECTOR_HOSTS)) {
+			validateAndParseHostsString(properties);
+		} else {
+			final Map<String, Consumer<String>> hostsValidators = new HashMap<>();
+			hostsValidators.put(CONNECTOR_HOSTS_HOSTNAME, (key) -> properties.validateString(key, false, 1));
+			hostsValidators.put(CONNECTOR_HOSTS_PORT, (key) -> properties.validateInt(key, false, 0, 65535));
+			hostsValidators.put(CONNECTOR_HOSTS_PROTOCOL, (key) -> properties.validateString(key, false, 1));
+
+			properties.validateFixedIndexedProperties(CONNECTOR_HOSTS, false, hostsValidators);
+		}
 	}
 
 	private void validateGeneralProperties(DescriptorProperties properties) {
@@ -99,11 +111,11 @@ public class ElasticsearchValidator extends ConnectorDescriptorValidator {
 
 	private void validateFailureHandler(DescriptorProperties properties) {
 		final Map<String, Consumer<String>> failureHandlerValidators = new HashMap<>();
-		failureHandlerValidators.put(CONNECTOR_FAILURE_HANDLER_VALUE_FAIL, properties.noValidation());
-		failureHandlerValidators.put(CONNECTOR_FAILURE_HANDLER_VALUE_IGNORE, properties.noValidation());
-		failureHandlerValidators.put(CONNECTOR_FAILURE_HANDLER_VALUE_RETRY, properties.noValidation());
+		failureHandlerValidators.put(CONNECTOR_FAILURE_HANDLER_VALUE_FAIL, noValidation());
+		failureHandlerValidators.put(CONNECTOR_FAILURE_HANDLER_VALUE_IGNORE, noValidation());
+		failureHandlerValidators.put(CONNECTOR_FAILURE_HANDLER_VALUE_RETRY, noValidation());
 		failureHandlerValidators.put(CONNECTOR_FAILURE_HANDLER_VALUE_CUSTOM,
-			prefix -> properties.validateString(CONNECTOR_FAILURE_HANDLER_CLASS, false, 1));
+			key -> properties.validateString(CONNECTOR_FAILURE_HANDLER_CLASS, false, 1));
 		properties.validateEnum(CONNECTOR_FAILURE_HANDLER, true, failureHandlerValidators);
 	}
 
@@ -125,5 +137,48 @@ public class ElasticsearchValidator extends ConnectorDescriptorValidator {
 	private void validateConnectionProperties(DescriptorProperties properties) {
 		properties.validateInt(CONNECTOR_CONNECTION_MAX_RETRY_TIMEOUT, true, 1);
 		properties.validateString(CONNECTOR_CONNECTION_PATH_PREFIX, true);
+	}
+
+	/**
+	 * Parse Hosts String to list.
+	 *
+	 * <p>Hosts String format was given as following:
+	 *
+	 * <pre>
+	 *     connector.hosts = http://host_name:9092;http://host_name:9093
+	 * </pre>
+	 */
+	public static List<Host> validateAndParseHostsString(DescriptorProperties descriptorProperties) {
+		final List<Host> hostList = new ArrayList<>();
+
+		descriptorProperties.validateString(CONNECTOR_HOSTS, false, 1);
+		final String hostsStr = descriptorProperties.getString(CONNECTOR_HOSTS);
+
+		final String[] hosts = hostsStr.split(";");
+		final String validationExceptionMessage = "Properties '" + CONNECTOR_HOSTS + "' format should " +
+			"follow the format 'http://host_name:port', but is '" + hostsStr + "'.";
+
+		if (hosts.length == 0) {
+			throw new ValidationException(validationExceptionMessage);
+		}
+		for (String host : hosts) {
+			try {
+				final URL url = new URL(host);
+				final String protocol = url.getProtocol();
+				final String hostName = url.getHost();
+				final int hostPort = url.getPort();
+
+				if (StringUtils.isNullOrWhitespaceOnly(protocol) ||
+					StringUtils.isNullOrWhitespaceOnly(hostName) ||
+					-1 == hostPort) {
+					throw new ValidationException(validationExceptionMessage);
+				}
+
+				hostList.add(new Host(hostName, hostPort, protocol));
+			} catch (MalformedURLException e) {
+				throw new ValidationException(validationExceptionMessage, e);
+			}
+		}
+		return hostList;
 	}
 }

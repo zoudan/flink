@@ -21,21 +21,26 @@ package org.apache.flink.runtime.operators.testutils;
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.runtime.io.disk.iomanager.IOManager;
+import org.apache.flink.runtime.io.disk.iomanager.IOManagerAsync;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.metrics.groups.UnregisteredMetricGroups;
 import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.state.TestTaskStateManager;
+import org.apache.flink.runtime.taskexecutor.GlobalAggregateManager;
+import org.apache.flink.runtime.taskexecutor.TestGlobalAggregateManager;
 import org.apache.flink.runtime.taskmanager.TaskManagerRuntimeInfo;
 import org.apache.flink.runtime.util.TestingTaskManagerRuntimeInfo;
 
-public class MockEnvironmentBuilder {
+	public class MockEnvironmentBuilder {
 	private String taskName = "mock-task";
-	private long memorySize = 1024 * MemoryManager.DEFAULT_PAGE_SIZE;
+	private long managedMemorySize = 1024 * MemoryManager.DEFAULT_PAGE_SIZE;
 	private MockInputSplitProvider inputSplitProvider = null;
 	private int bufferSize = 16;
 	private TaskStateManager taskStateManager = new TestTaskStateManager();
+	private GlobalAggregateManager aggregateManager= new TestGlobalAggregateManager();
 	private Configuration taskConfiguration = new Configuration();
 	private ExecutionConfig executionConfig = new ExecutionConfig();
 	private int maxParallelism = 1;
@@ -46,14 +51,15 @@ public class MockEnvironmentBuilder {
 	private JobVertexID jobVertexID = new JobVertexID();
 	private TaskMetricGroup taskMetricGroup = UnregisteredMetricGroups.createUnregisteredTaskMetricGroup();
 	private TaskManagerRuntimeInfo taskManagerRuntimeInfo = new TestingTaskManagerRuntimeInfo();
+	private IOManager ioManager;
 
 	public MockEnvironmentBuilder setTaskName(String taskName) {
 		this.taskName = taskName;
 		return this;
 	}
 
-	public MockEnvironmentBuilder setMemorySize(long memorySize) {
-		this.memorySize = memorySize;
+	public MockEnvironmentBuilder setManagedMemorySize(long managedMemorySize) {
+		this.managedMemorySize = managedMemorySize;
 		return this;
 	}
 
@@ -122,17 +128,27 @@ public class MockEnvironmentBuilder {
 		return this;
 	}
 
+	public MockEnvironmentBuilder setIOManager(IOManager ioManager) {
+		this.ioManager = ioManager;
+		return this;
+	}
+
 	public MockEnvironment build() {
+		if (ioManager == null) {
+			ioManager = new IOManagerAsync();
+		}
 		return new MockEnvironment(
 			jobID,
 			jobVertexID,
 			taskName,
-			memorySize,
+			managedMemorySize,
 			inputSplitProvider,
 			bufferSize,
 			taskConfiguration,
 			executionConfig,
+			ioManager,
 			taskStateManager,
+			aggregateManager,
 			maxParallelism,
 			parallelism,
 			subtaskIndex,

@@ -415,6 +415,18 @@ class DataStream[T](stream: JavaStream[T]) {
   }
 
   /**
+   * Groups the elements of a DataStream by the given K key to
+   * be used with grouped operators like grouped reduce or grouped aggregations.
+   */
+  def keyBy[K: TypeInformation](fun: KeySelector[T, K]): KeyedStream[T, K] = {
+
+    val cleanFun = clean(fun)
+    val keyType: TypeInformation[K] = implicitly[TypeInformation[K]]
+
+    asScalaStream(new JavaKeyedStream(stream, cleanFun, keyType))
+  }
+
+  /**
    * Partitions a tuple DataStream on the specified key fields using a custom partitioner.
    * This method takes the key position to partition on, and a partitioner that accepts the key
    * type.
@@ -619,7 +631,7 @@ class DataStream[T](stream: JavaStream[T]) {
     }
 
     val outType : TypeInformation[R] = implicitly[TypeInformation[R]]
-    asScalaStream(stream.map(mapper).returns(outType).asInstanceOf[JavaStream[R]])
+    asScalaStream(stream.map(mapper, outType).asInstanceOf[JavaStream[R]])
   }
 
   /**
@@ -632,7 +644,7 @@ class DataStream[T](stream: JavaStream[T]) {
     }
 
     val outType : TypeInformation[R] = implicitly[TypeInformation[R]]
-    asScalaStream(stream.flatMap(flatMapper).returns(outType).asInstanceOf[JavaStream[R]])
+    asScalaStream(stream.flatMap(flatMapper, outType).asInstanceOf[JavaStream[R]])
   }
 
   /**
@@ -903,13 +915,19 @@ class DataStream[T](stream: JavaStream[T]) {
    * Operator used for directing tuples to specific named outputs using an
    * OutputSelector. Calling this method on an operator creates a new
    * [[SplitStream]].
+   *
+   * @deprecated Please use side output instead.
    */
+  @deprecated
   def split(selector: OutputSelector[T]): SplitStream[T] = asScalaStream(stream.split(selector))
 
   /**
    * Creates a new [[SplitStream]] that contains only the elements satisfying the
    *  given output selector predicate.
+   *
+   * @deprecated Please use side output instead.
    */
+  @deprecated
   def split(fun: T => TraversableOnce[String]): SplitStream[T] = {
     if (fun == null) {
       throw new NullPointerException("OutputSelector must not be null.")
@@ -988,7 +1006,12 @@ class DataStream[T](stream: JavaStream[T]) {
     *
     * @param path The path pointing to the location the text file is written to
     * @return The closed DataStream
+    *
+    * @deprecated Please use the
+    *             [[org.apache.flink.streaming.api.functions.sink.filesystem.StreamingFileSink]]
+    *             explicitly using the [[addSink()]] method.
     */
+  @Deprecated
   @PublicEvolving
   def writeAsText(path: String): DataStreamSink[T] =
     stream.writeAsText(path)
@@ -1003,7 +1026,12 @@ class DataStream[T](stream: JavaStream[T]) {
     * @param writeMode Controls the behavior for existing files. Options are NO_OVERWRITE and
     *                  OVERWRITE.
     * @return The closed DataStream
+    *
+    * @deprecated Please use the
+    *             [[org.apache.flink.streaming.api.functions.sink.filesystem.StreamingFileSink]]
+    *             explicitly using the [[addSink()]] method.
     */
+  @Deprecated
   @PublicEvolving
   def writeAsText(path: String, writeMode: FileSystem.WriteMode): DataStreamSink[T] = {
     if (writeMode != null) {
@@ -1019,7 +1047,12 @@ class DataStream[T](stream: JavaStream[T]) {
     *
     * @param path Path to the location of the CSV file
     * @return The closed DataStream
+    *
+    * @deprecated Please use the
+    *             [[org.apache.flink.streaming.api.functions.sink.filesystem.StreamingFileSink]]
+    *             explicitly using the [[addSink()]] method.
     */
+  @Deprecated
   @PublicEvolving
   def writeAsCsv(path: String): DataStreamSink[T] = {
     writeAsCsv(
@@ -1036,7 +1069,12 @@ class DataStream[T](stream: JavaStream[T]) {
     * @param path Path to the location of the CSV file
     * @param writeMode Controls whether an existing file is overwritten or not
     * @return The closed DataStream
+    *
+    * @deprecated Please use the
+    *             [[org.apache.flink.streaming.api.functions.sink.filesystem.StreamingFileSink]]
+    *             explicitly using the [[addSink()]] method.
     */
+  @Deprecated
   @PublicEvolving
   def writeAsCsv(path: String, writeMode: FileSystem.WriteMode): DataStreamSink[T] = {
     writeAsCsv(
@@ -1055,7 +1093,12 @@ class DataStream[T](stream: JavaStream[T]) {
     * @param rowDelimiter Delimiter for consecutive rows
     * @param fieldDelimiter Delimiter for consecutive fields
     * @return The closed DataStream
+    *
+    * @deprecated Please use the
+    *             [[org.apache.flink.streaming.api.functions.sink.filesystem.StreamingFileSink]]
+    *             explicitly using the [[addSink()]] method.
     */
+  @Deprecated
   @PublicEvolving
   def writeAsCsv(
       path: String,
@@ -1112,7 +1155,7 @@ class DataStream[T](stream: JavaStream[T]) {
     }
     val cleanFun = clean(fun)
     val sinkFunction = new SinkFunction[T] {
-      def invoke(in: T) = cleanFun(in)
+      override def invoke(in: T) = cleanFun(in)
     }
     this.addSink(sinkFunction)
   }

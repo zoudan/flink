@@ -18,7 +18,6 @@
 
 package org.apache.flink.api.common.typeutils;
 
-import org.apache.flink.api.common.typeutils.base.DoubleSerializer;
 import org.apache.flink.api.common.typeutils.base.IntSerializer;
 import org.apache.flink.api.common.typeutils.base.StringSerializer;
 import org.apache.flink.api.java.tuple.Tuple2;
@@ -30,6 +29,7 @@ import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.testutils.ArtificialCNFExceptionThrowingClassLoader;
 import org.apache.flink.util.InstantiationUtil;
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.ClassRule;
 import org.junit.Test;
@@ -200,11 +200,11 @@ public class TypeSerializerSerializationUtilTest implements Serializable {
 	 */
 	@Test
 	public void testSerializerAndConfigPairsSerializationWithSerializerDeserializationFailures() throws Exception {
+		TestIntSerializer serializer = new TestIntSerializer();
+
 		List<Tuple2<TypeSerializer<?>, TypeSerializerSnapshot<?>>> serializersAndConfigs = Arrays.asList(
 			new Tuple2<TypeSerializer<?>, TypeSerializerSnapshot<?>>(
-				IntSerializer.INSTANCE, IntSerializer.INSTANCE.snapshotConfiguration()),
-			new Tuple2<TypeSerializer<?>, TypeSerializerSnapshot<?>>(
-				DoubleSerializer.INSTANCE, DoubleSerializer.INSTANCE.snapshotConfiguration()));
+				serializer, serializer.snapshotConfiguration()));
 
 		byte[] serializedSerializersAndConfigs;
 		try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
@@ -214,8 +214,7 @@ public class TypeSerializerSerializationUtilTest implements Serializable {
 		}
 
 		Set<String> cnfThrowingClassnames = new HashSet<>();
-		cnfThrowingClassnames.add(IntSerializer.class.getName());
-		cnfThrowingClassnames.add(DoubleSerializer.class.getName());
+		cnfThrowingClassnames.add(TestIntSerializer.class.getName());
 
 		List<Tuple2<TypeSerializer<?>, TypeSerializerSnapshot<?>>> restored;
 		try (ByteArrayInputStream in = new ByteArrayInputStream(serializedSerializersAndConfigs)) {
@@ -226,15 +225,9 @@ public class TypeSerializerSerializationUtilTest implements Serializable {
 					cnfThrowingClassnames));
 		}
 
-		Assert.assertEquals(2, restored.size());
+		Assert.assertEquals(1, restored.size());
 		Assert.assertTrue(restored.get(0).f0 instanceof UnloadableDummyTypeSerializer);
-		Assert.assertEquals(
-			IntSerializer.INSTANCE.snapshotConfiguration(),
-			restored.get(0).f1);
-		Assert.assertTrue(restored.get(1).f0 instanceof UnloadableDummyTypeSerializer);
-		Assert.assertEquals(
-			DoubleSerializer.INSTANCE.snapshotConfiguration(),
-			restored.get(1).f1);
+		Assert.assertThat(restored.get(0).f1, Matchers.instanceOf(SimpleTypeSerializerSnapshot.class));
 	}
 
 	/**
@@ -243,7 +236,12 @@ public class TypeSerializerSerializationUtilTest implements Serializable {
 	@Test
 	public void testAnonymousSerializerClassWithChangedSerialVersionUID() throws Exception {
 
-		TypeSerializer anonymousClassSerializer = new AbstractIntSerializer() {};
+		TypeSerializer anonymousClassSerializer = new AbstractIntSerializer() {
+			@Override
+			public TypeSerializerSnapshot<Integer> snapshotConfiguration() {
+				return null;
+			}
+		};
 		// assert that our assumption holds
 		Assert.assertTrue(anonymousClassSerializer.getClass().isAnonymousClass());
 
@@ -364,7 +362,7 @@ public class TypeSerializerSerializationUtilTest implements Serializable {
 
 	public static abstract class AbstractIntSerializer extends TypeSerializer<Integer> {
 
-		public static final long serialVersionUID = 1;
+		private static final long serialVersionUID = 1;
 
 		@Override
 		public Integer createInstance() {
@@ -412,23 +410,8 @@ public class TypeSerializerSerializationUtilTest implements Serializable {
 		}
 
 		@Override
-		public TypeSerializerConfigSnapshot<Integer> snapshotConfiguration() {
-			return IntSerializer.INSTANCE.snapshotConfiguration();
-		}
-
-		@Override
-		public CompatibilityResult<Integer> ensureCompatibility(TypeSerializerConfigSnapshot<?> configSnapshot) {
-			return IntSerializer.INSTANCE.ensureCompatibility(configSnapshot);
-		}
-
-		@Override
 		public int getLength() {
 			return IntSerializer.INSTANCE.getLength();
-		}
-
-		@Override
-		public boolean canEqual(Object obj) {
-			return IntSerializer.INSTANCE.canEqual(obj);
 		}
 
 		@Override
@@ -439,6 +422,25 @@ public class TypeSerializerSerializationUtilTest implements Serializable {
 		@Override
 		public int hashCode() {
 			return IntSerializer.INSTANCE.hashCode();
+		}
+	}
+
+	/** Just some serializer used for tests. */
+	public static class TestIntSerializer extends AbstractIntSerializer {
+		private static final long serialVersionUID = -3684467698271707216L;
+
+		@Override
+		public TypeSerializerSnapshot<Integer> snapshotConfiguration() {
+			return new TestIntSerializerSnapshot();
+		}
+	}
+
+	/**
+	 * Test serializer snapshot.
+	 */
+	public static class TestIntSerializerSnapshot extends SimpleTypeSerializerSnapshot<Integer> {
+		public TestIntSerializerSnapshot() {
+			super(TestIntSerializer::new);
 		}
 	}
 }

@@ -23,7 +23,7 @@
 	<parent>
 		<groupId>org.apache.flink</groupId>
 		<artifactId>flink-libraries</artifactId>
-		<version>1.7-SNAPSHOT</version>
+		<version>1.11-SNAPSHOT</version>
 		<relativePath>..</relativePath>
 	</parent>
 
@@ -106,9 +106,10 @@
 
 		<dependency>
 			<groupId>org.apache.flink</groupId>
-			<artifactId>flink-tests_${scala.binary.version}</artifactId>
+			<artifactId>flink-core</artifactId>
 			<version>${project.version}</version>
 			<scope>test</scope>
+			<type>test-jar</type>
 		</dependency>
 	</dependencies>
 
@@ -200,7 +201,6 @@
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>build-helper-maven-plugin</artifactId>
-				<version>1.7</version>
 				<executions>
 					<!-- Add src/main/scala to eclipse build path -->
 					<execution>

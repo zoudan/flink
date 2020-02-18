@@ -17,24 +17,27 @@
 # limitations under the License.
 ################################################################################
 
-set -o pipefail
-
 if [[ -z $TEST_DATA_DIR ]]; then
   echo "Must run common.sh before kafka-common.sh."
   exit 1
 fi
 
-KAFKA_DIR=$TEST_DATA_DIR/kafka_2.11-0.10.2.0
-CONFLUENT_DIR=$TEST_DATA_DIR/confluent-3.2.0
+KAFKA_VERSION="$1"
+CONFLUENT_VERSION="$2"
+CONFLUENT_MAJOR_VERSION="$3"
+
+KAFKA_DIR=$TEST_DATA_DIR/kafka_2.11-$KAFKA_VERSION
+CONFLUENT_DIR=$TEST_DATA_DIR/confluent-$CONFLUENT_VERSION
 SCHEMA_REGISTRY_PORT=8082
 SCHEMA_REGISTRY_URL=http://localhost:${SCHEMA_REGISTRY_PORT}
+MAX_RETRY_SECONDS=120
 
 function setup_kafka_dist {
   # download Kafka
   mkdir -p $TEST_DATA_DIR
-  KAFKA_URL="https://archive.apache.org/dist/kafka/0.10.2.0/kafka_2.11-0.10.2.0.tgz"
+  KAFKA_URL="https://archive.apache.org/dist/kafka/$KAFKA_VERSION/kafka_2.11-$KAFKA_VERSION.tgz"
   echo "Downloading Kafka from $KAFKA_URL"
-  curl "$KAFKA_URL" > $TEST_DATA_DIR/kafka.tgz
+  curl ${KAFKA_URL} --retry 10 --retry-max-time 120 --output ${TEST_DATA_DIR}/kafka.tgz
 
   tar xzf $TEST_DATA_DIR/kafka.tgz -C $TEST_DATA_DIR/
 
@@ -46,9 +49,9 @@ function setup_kafka_dist {
 function setup_confluent_dist {
   # download confluent
   mkdir -p $TEST_DATA_DIR
-  CONFLUENT_URL="http://packages.confluent.io/archive/3.2/confluent-oss-3.2.0-2.11.tar.gz"
+  CONFLUENT_URL="http://packages.confluent.io/archive/$CONFLUENT_MAJOR_VERSION/confluent-oss-$CONFLUENT_VERSION-2.11.tar.gz"
   echo "Downloading confluent from $CONFLUENT_URL"
-  curl "$CONFLUENT_URL" > $TEST_DATA_DIR/confluent.tgz
+  curl ${CONFLUENT_URL} --retry 10 --retry-max-time 120 --output ${TEST_DATA_DIR}/confluent.tgz
 
   tar xzf $TEST_DATA_DIR/confluent.tgz -C $TEST_DATA_DIR/
 
@@ -65,27 +68,42 @@ function start_kafka_cluster {
   $KAFKA_DIR/bin/zookeeper-server-start.sh -daemon $KAFKA_DIR/config/zookeeper.properties
   $KAFKA_DIR/bin/kafka-server-start.sh -daemon $KAFKA_DIR/config/server.properties
 
+  start_time=$(date +%s)
   # zookeeper outputs the "Node does not exist" bit to stderr
   while [[ $($KAFKA_DIR/bin/zookeeper-shell.sh localhost:2181 get /brokers/ids/0 2>&1) =~ .*Node\ does\ not\ exist.* ]]; do
-    echo "Waiting for broker..."
-    sleep 1
+    current_time=$(date +%s)
+    time_diff=$((current_time - start_time))
+
+    if [ $time_diff -ge $MAX_RETRY_SECONDS ]; then
+        echo "Kafka cluster did not start after $MAX_RETRY_SECONDS seconds. Printing Kafka logs:"
+        cat $KAFKA_DIR/logs/*
+        exit 1
+    else
+        echo "Waiting for broker..."
+        sleep 1
+    fi
   done
 }
 
 function stop_kafka_cluster {
-  $KAFKA_DIR/bin/kafka-server-stop.sh
+  if ! [[ -z $($KAFKA_DIR/bin/kafka-server-stop.sh) ]]; then
+    echo "Kafka server was already shut down; dumping logs:"
+    cat ${KAFKA_DIR}/logs/server.out
+  fi
   $KAFKA_DIR/bin/zookeeper-server-stop.sh
 
-  PIDS=$(jps -vl | grep -i 'kafka\.Kafka' | grep java | grep -v grep | awk '{print $1}')
+  # Terminate Kafka process if it still exists
+  PIDS=$(jps -vl | grep -i 'kafka\.Kafka' | grep java | grep -v grep | awk '{print $1}'|| echo "")
 
   if [ ! -z "$PIDS" ]; then
-    kill -s TERM $PIDS
+    kill -s TERM $PIDS || true
   fi
 
-  PIDS=$(jps -vl | grep java | grep -i QuorumPeerMain | grep -v grep | awk '{print $1}')
+  # Terminate QuorumPeerMain process if it still exists
+  PIDS=$(jps -vl | grep java | grep -i QuorumPeerMain | grep -v grep | awk '{print $1}'|| echo "")
 
   if [ ! -z "$PIDS" ]; then
-    kill -s TERM $PIDS
+    kill -s TERM $PIDS || true
   fi
 }
 
@@ -105,7 +123,16 @@ function read_messages_from_kafka {
 }
 
 function send_messages_to_kafka_avro {
-echo -e $1 | $CONFLUENT_DIR/bin/kafka-avro-console-producer --broker-list localhost:9092 --topic $2 --property value.schema=$3 --property schema.registry.url=${SCHEMA_REGISTRY_URL}
+  echo -e $1 | $CONFLUENT_DIR/bin/kafka-avro-console-producer --broker-list localhost:9092 --topic $2 --property value.schema=$3 --property schema.registry.url=${SCHEMA_REGISTRY_URL}
+}
+
+function read_messages_from_kafka_avro {
+  $CONFLUENT_DIR/bin/kafka-avro-console-consumer --bootstrap-server localhost:9092 --from-beginning \
+    --max-messages $1 \
+    --topic $2 \
+    --property value.schema=$3 \
+    --property schema.registry.url=${SCHEMA_REGISTRY_URL} \
+    --consumer-property group.id=$4
 }
 
 function modify_num_partitions {
@@ -120,14 +147,7 @@ function get_partition_end_offset {
   local topic=$1
   local partition=$2
 
-  # first, use the console consumer to produce a dummy consumer group
-  read_messages_from_kafka 0 $topic dummy-consumer
-
-  # then use the consumer offset utility to get the LOG_END_OFFSET value for the specified partition
-  $KAFKA_DIR/bin/kafka-consumer-groups.sh --describe --group dummy-consumer --bootstrap-server localhost:9092 2> /dev/null \
-    | grep "$topic \+$partition" \
-    | tr -s " " \
-    | cut -d " " -f 4
+  $KAFKA_DIR/bin/kafka-run-class.sh kafka.tools.GetOffsetShell --broker-list localhost:9092 --topic $topic --partitions $partition --time -1 | cut -d ":" -f 3
 }
 
 function start_confluent_schema_registry {
@@ -146,7 +166,7 @@ function start_confluent_schema_registry {
 
   if ! get_and_verify_schema_subjects_exist; then
       echo "Could not start confluent schema registry"
-      exit 1
+      return 1
   fi
 }
 

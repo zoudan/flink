@@ -19,13 +19,15 @@
 package org.apache.flink.test.runtime;
 
 import org.apache.flink.api.common.ExecutionConfig;
-import org.apache.flink.api.common.JobSubmissionResult;
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.client.program.MiniClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.JobManagerOptions;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.RestOptions;
+import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
 import org.apache.flink.runtime.jobgraph.DistributionPattern;
@@ -38,11 +40,12 @@ import org.apache.flink.runtime.jobmaster.JobResult;
 import org.apache.flink.runtime.minicluster.MiniCluster;
 import org.apache.flink.runtime.minicluster.MiniClusterConfiguration;
 import org.apache.flink.runtime.testtasks.NoOpInvokable;
+import org.apache.flink.testutils.junit.category.AlsoRunWithLegacyScheduler;
 import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.TestLogger;
 
-import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import javax.annotation.Nonnull;
 
@@ -50,12 +53,14 @@ import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static org.apache.flink.configuration.JobManagerOptions.EXECUTION_FAILOVER_STRATEGY;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertThat;
 
 /**
  * IT case for testing Flink's scheduling strategies.
  */
+@Category(AlsoRunWithLegacyScheduler.class)
 public class SchedulingITCase extends TestLogger {
 
 	/**
@@ -72,22 +77,37 @@ public class SchedulingITCase extends TestLogger {
 
 	/**
 	 * Tests that if local recovery is enabled we won't spread
-	 * out tasks when recovering.
+	 * out tasks when recovering for global failover.
 	 */
 	@Test
-	@Ignore("The test should not pass until FLINK-9635 has been fixed")
-	public void testLocalRecovery() throws Exception {
+	public void testLocalRecoveryFull() throws Exception {
+		testLocalRecoveryInternal("full");
+	}
+
+	/**
+	 * Tests that if local recovery is enabled we won't spread
+	 * out tasks when recovering for regional failover.
+	 */
+	@Test
+	public void testLocalRecoveryRegion() throws Exception {
+		testLocalRecoveryInternal("region");
+	}
+
+	private void testLocalRecoveryInternal(String failoverStrategyValue) throws Exception {
 		final Configuration configuration = new Configuration();
 		configuration.setBoolean(CheckpointingOptions.LOCAL_RECOVERY, true);
+		configuration.setString(EXECUTION_FAILOVER_STRATEGY.key(), failoverStrategyValue);
 
 		executeSchedulingTest(configuration);
 	}
 
 	private void executeSchedulingTest(Configuration configuration) throws Exception {
-		configuration.setInteger(RestOptions.PORT, 0);
+		configuration.setString(RestOptions.BIND_PORT, "0");
 
 		final long slotIdleTimeout = 50L;
 		configuration.setLong(JobManagerOptions.SLOT_IDLE_TIMEOUT, slotIdleTimeout);
+
+		configuration.set(TaskManagerOptions.TOTAL_FLINK_MEMORY, MemorySize.parse("1g"));
 
 		final int parallelism = 4;
 		final MiniClusterConfiguration miniClusterConfiguration = new MiniClusterConfiguration.Builder()
@@ -102,12 +122,11 @@ public class SchedulingITCase extends TestLogger {
 			MiniClusterClient miniClusterClient = new MiniClusterClient(configuration, miniCluster);
 
 			JobGraph jobGraph = createJobGraph(slotIdleTimeout << 1, parallelism);
-			CompletableFuture<JobSubmissionResult> submissionFuture = miniClusterClient.submitJob(jobGraph);
 
 			// wait for the submission to succeed
-			JobSubmissionResult jobSubmissionResult = submissionFuture.get();
+			JobID jobID = miniClusterClient.submitJob(jobGraph).get();
 
-			CompletableFuture<JobResult> resultFuture = miniClusterClient.requestJobResult(jobSubmissionResult.getJobID());
+			CompletableFuture<JobResult> resultFuture = miniClusterClient.requestJobResult(jobID);
 
 			JobResult jobResult = resultFuture.get();
 

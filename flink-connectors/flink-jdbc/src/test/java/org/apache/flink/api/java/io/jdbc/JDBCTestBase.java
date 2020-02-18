@@ -23,6 +23,8 @@ import org.apache.flink.api.java.typeutils.RowTypeInfo;
 
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Rule;
+import org.junit.rules.ExpectedException;
 
 import java.io.OutputStream;
 import java.sql.Connection;
@@ -31,9 +33,12 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 /**
- * Base test class for JDBC Input and Output formats.
+ * Base test class for JDBC Input and Output.
  */
 public class JDBCTestBase {
+
+	@Rule
+	public ExpectedException exception = ExpectedException.none();
 
 	public static final String DRIVER_CLASS = "org.apache.derby.jdbc.EmbeddedDriver";
 	public static final String DB_URL = "jdbc:derby:memory:ebookshop";
@@ -41,6 +46,7 @@ public class JDBCTestBase {
 	public static final String OUTPUT_TABLE = "newbooks";
 	public static final String OUTPUT_TABLE_2 = "newbooks2";
 	public static final String SELECT_ALL_BOOKS = "select * from " + INPUT_TABLE;
+	public static final String SELECT_ID_BOOKS = "select id from " + INPUT_TABLE;
 	public static final String SELECT_ALL_NEWBOOKS = "select * from " + OUTPUT_TABLE;
 	public static final String SELECT_ALL_NEWBOOKS_2 = "select * from " + OUTPUT_TABLE_2;
 	public static final String SELECT_EMPTY = "select * from books WHERE QTY < 0";

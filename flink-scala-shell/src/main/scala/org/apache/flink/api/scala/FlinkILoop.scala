@@ -20,80 +20,78 @@ package org.apache.flink.api.scala
 
 import java.io.{BufferedReader, File, FileOutputStream}
 
-import org.apache.flink.api.java.{JarHelper, ScalaShellRemoteEnvironment, ScalaShellRemoteStreamEnvironment}
+import org.apache.flink.api.java.{JarHelper, ScalaShellEnvironment, ScalaShellStreamEnvironment}
 import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
 import org.apache.flink.configuration.Configuration
+import org.apache.flink.table.api.scala.{BatchTableEnvironment, StreamTableEnvironment}
 import org.apache.flink.util.AbstractID
 
 import scala.tools.nsc.interpreter._
 
 
 class FlinkILoop(
-    val host: String,
-    val port: Int,
-    val clientConfig: Configuration,
+    val flinkConfig: Configuration,
     val externalJars: Option[Array[String]],
     in0: Option[BufferedReader],
     out0: JPrintWriter)
   extends ILoop(in0, out0) {
 
   def this(
-    host: String,
-    port: Int,
-    clientConfig: Configuration,
+    flinkConfig: Configuration,
     externalJars: Option[Array[String]],
     in0: BufferedReader,
     out: JPrintWriter) {
-    this(host, port, clientConfig, externalJars, Some(in0), out)
+    this(flinkConfig, externalJars, Some(in0), out)
   }
 
   def this(
-    host: String,
-    port: Int,
-    clientConfig: Configuration,
+    flinkConfig: Configuration,
     externalJars: Option[Array[String]]) {
-    this(host, port, clientConfig, externalJars, None, new JPrintWriter(Console.out, true))
+    this(flinkConfig, externalJars, None, new JPrintWriter(Console.out, true))
   }
-  
+
   def this(
-    host: String,
-    port: Int,
-    clientConfig: Configuration,
+    flinkConfig: Configuration,
     in0: BufferedReader,
     out: JPrintWriter){
-    this(host, port, clientConfig, None, in0, out)
+    this(flinkConfig, None, in0, out)
   }
 
   // remote environment
-  private val (remoteBenv: ScalaShellRemoteEnvironment,
-  remoteSenv: ScalaShellRemoteStreamEnvironment) = {
+  private val (remoteBenv: ScalaShellEnvironment,
+  remoteSenv: ScalaShellStreamEnvironment) = {
     // allow creation of environments
-    ScalaShellRemoteEnvironment.resetContextEnvironments()
-    
+    ScalaShellEnvironment.resetContextEnvironments()
+    ScalaShellStreamEnvironment.resetContextEnvironments()
+
     // create our environment that submits against the cluster (local or remote)
-    val remoteBenv = new ScalaShellRemoteEnvironment(
-      host,
-      port,
+    val remoteBenv = new ScalaShellEnvironment(
+      flinkConfig,
       this,
-      clientConfig,
       this.getExternalJars(): _*)
-    val remoteSenv = new ScalaShellRemoteStreamEnvironment(
-      host,
-      port,
+    val remoteSenv = new ScalaShellStreamEnvironment(
+      flinkConfig,
       this,
-      clientConfig,
       getExternalJars(): _*)
     // prevent further instantiation of environments
-    ScalaShellRemoteEnvironment.disableAllContextAndOtherEnvironments()
-    
+    ScalaShellEnvironment.disableAllContextAndOtherEnvironments()
+    ScalaShellStreamEnvironment.disableAllContextAndOtherEnvironments()
+
     (remoteBenv,remoteSenv)
   }
 
   // local environment
-  val (scalaBenv: ExecutionEnvironment, scalaSenv: StreamExecutionEnvironment) = {
+  val (
+    scalaBenv: ExecutionEnvironment,
+    scalaSenv: StreamExecutionEnvironment,
+    scalaBTEnv: BatchTableEnvironment,
+    scalaSTEnv: StreamTableEnvironment
+    ) = {
     val scalaBenv = new ExecutionEnvironment(remoteBenv)
     val scalaSenv = new StreamExecutionEnvironment(remoteSenv)
-    (scalaBenv,scalaSenv)
+    val scalaBTEnv = BatchTableEnvironment.create(scalaBenv)
+    val scalaSTEnv = StreamTableEnvironment.create(scalaSenv)
+    (scalaBenv,scalaSenv,scalaBTEnv,scalaSTEnv)
   }
 
   /**
@@ -139,7 +137,9 @@ class FlinkILoop(
     "org.apache.flink.api.scala._",
     "org.apache.flink.api.scala.utils._",
     "org.apache.flink.streaming.api.scala._",
-    "org.apache.flink.streaming.api.windowing.time._"
+    "org.apache.flink.streaming.api.windowing.time._",
+    "org.apache.flink.table.api.scala._",
+    "org.apache.flink.types.Row"
   )
 
   override def createInterpreter(): Unit = {
@@ -152,6 +152,8 @@ class FlinkILoop(
       // set execution environment
       intp.bind("benv", this.scalaBenv)
       intp.bind("senv", this.scalaSenv)
+      intp.bind("btenv", this.scalaBTEnv)
+      intp.bind("stenv", this.scalaSTEnv)
     }
   }
 
@@ -243,22 +245,29 @@ class FlinkILoop(
 
               F L I N K - S C A L A - S H E L L
 
-NOTE: Use the prebound Execution Environments to implement batch or streaming programs.
+NOTE: Use the prebound Execution Environments and Table Environment to implement batch or streaming programs.
 
-  Batch - Use the 'benv' variable
+  Batch - Use the 'benv' and 'btenv' variable
 
     * val dataSet = benv.readTextFile("/path/to/data")
     * dataSet.writeAsText("/path/to/output")
     * benv.execute("My batch program")
+    *
+    * val batchTable = btenv.fromDataSet(dataSet)
+    * btenv.registerTable("tableName", batchTable)
+    * val result = btenv.sqlQuery("SELECT * FROM tableName").collect
+    HINT: You can use print() on a DataSet to print the contents or collect()
+    a sql query result back to the shell.
 
-    HINT: You can use print() on a DataSet to print the contents to the shell.
-
-  Streaming - Use the 'senv' variable
+  Streaming - Use the 'senv' and 'stenv' variable
 
     * val dataStream = senv.fromElements(1, 2, 3, 4)
     * dataStream.countWindowAll(2).sum(0).print()
+    *
+    * val streamTable = stenv.fromDataStream(dataStream, 'num)
+    * val resultTable = streamTable.select('num).where('num % 2 === 1 )
+    * resultTable.toAppendStream[Row].print()
     * senv.execute("My streaming program")
-
     HINT: You can only print a DataStream to the shell in local mode.
       """
     // scalastyle:on

@@ -24,7 +24,6 @@ import org.apache.flink.runtime.checkpoint.CheckpointStatsCounts;
 import org.apache.flink.runtime.checkpoint.CheckpointStatsHistory;
 import org.apache.flink.runtime.checkpoint.CheckpointStatsSnapshot;
 import org.apache.flink.runtime.checkpoint.CompletedCheckpointStatsSummary;
-import org.apache.flink.runtime.checkpoint.MinMaxAvgStats;
 import org.apache.flink.runtime.checkpoint.RestoredCheckpointStats;
 import org.apache.flink.runtime.executiongraph.AccessExecutionGraph;
 import org.apache.flink.runtime.rest.handler.HandlerRequest;
@@ -53,7 +52,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
 /**
@@ -62,14 +60,13 @@ import java.util.concurrent.Executor;
 public class CheckpointingStatisticsHandler extends AbstractExecutionGraphHandler<CheckpointingStatistics, JobMessageParameters> implements JsonArchivist {
 
 	public CheckpointingStatisticsHandler(
-			CompletableFuture<String> localRestAddress,
 			GatewayRetriever<? extends RestfulGateway> leaderRetriever,
 			Time timeout,
 			Map<String, String> responseHeaders,
 			MessageHeaders<EmptyRequestBody, CheckpointingStatistics, JobMessageParameters> messageHeaders,
 			ExecutionGraphCache executionGraphCache,
 			Executor executor) {
-		super(localRestAddress, leaderRetriever, timeout, responseHeaders, messageHeaders, executionGraphCache, executor);
+		super(leaderRetriever, timeout, responseHeaders, messageHeaders, executionGraphCache, executor);
 	}
 
 	@Override
@@ -106,23 +103,11 @@ public class CheckpointingStatisticsHandler extends AbstractExecutionGraphHandle
 				checkpointStatsCounts.getNumberOfFailedCheckpoints());
 
 			final CompletedCheckpointStatsSummary checkpointStatsSummary = checkpointStatsSnapshot.getSummaryStats();
-			final MinMaxAvgStats stateSize = checkpointStatsSummary.getStateSizeStats();
-			final MinMaxAvgStats duration = checkpointStatsSummary.getEndToEndDurationStats();
-			final MinMaxAvgStats alignment = checkpointStatsSummary.getAlignmentBufferedStats();
 
 			final CheckpointingStatistics.Summary summary = new CheckpointingStatistics.Summary(
-				new MinMaxAvgStatistics(
-					stateSize.getMinimum(),
-					stateSize.getMaximum(),
-					stateSize.getAverage()),
-				new MinMaxAvgStatistics(
-					duration.getMinimum(),
-					duration.getMaximum(),
-					duration.getAverage()),
-				new MinMaxAvgStatistics(
-					alignment.getMinimum(),
-					alignment.getMaximum(),
-					alignment.getAverage()));
+				MinMaxAvgStatistics.valueOf(checkpointStatsSummary.getStateSizeStats()),
+				MinMaxAvgStatistics.valueOf(checkpointStatsSummary.getEndToEndDurationStats()),
+				MinMaxAvgStatistics.valueOf(checkpointStatsSummary.getAlignmentBufferedStats()));
 
 			final CheckpointStatsHistory checkpointStatsHistory = checkpointStatsSnapshot.getHistory();
 

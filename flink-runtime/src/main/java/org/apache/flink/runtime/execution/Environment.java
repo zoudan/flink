@@ -34,11 +34,13 @@ import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
+import org.apache.flink.runtime.jobgraph.tasks.TaskOperatorEventGateway;
 import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.state.internal.InternalKvState;
+import org.apache.flink.runtime.taskexecutor.GlobalAggregateManager;
 import org.apache.flink.runtime.taskmanager.TaskManagerRuntimeInfo;
 
 import java.util.Map;
@@ -124,6 +126,11 @@ public interface Environment {
 	InputSplitProvider getInputSplitProvider();
 
 	/**
+	 * Gets the gateway through which operators can send events to the operator coordinators.
+	 */
+	TaskOperatorEventGateway getOperatorCoordinatorEventGateway();
+
+	/**
 	 * Returns the current {@link IOManager}.
 	 *
 	 * @return the current {@link IOManager}.
@@ -147,6 +154,8 @@ public interface Environment {
 	BroadcastVariableManager getBroadcastVariableManager();
 
 	TaskStateManager getTaskStateManager();
+
+	GlobalAggregateManager getGlobalAggregateManager();
 
 	/**
 	 * Return the registry for accumulators which are periodically sent to the job manager.

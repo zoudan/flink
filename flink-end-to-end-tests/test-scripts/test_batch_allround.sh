@@ -17,6 +17,8 @@
 # limitations under the License.
 ################################################################################
 
+set -Eeuo pipefail
+
 source "$(dirname "$0")"/common.sh
 
 TEST_PROGRAM_JAR=${END_TO_END_DIR}/flink-dataset-allround-test/target/DataSetAllroundTestProgram.jar
@@ -24,10 +26,10 @@ TEST_PROGRAM_JAR=${END_TO_END_DIR}/flink-dataset-allround-test/target/DataSetAll
 echo "Run DataSet-Allround-Test Program"
 
 # modify configuration to include spilling to disk
-echo "taskmanager.network.memory.min: 10485760" >> $FLINK_DIR/conf/flink-conf.yaml
-echo "taskmanager.network.memory.max: 10485760" >> $FLINK_DIR/conf/flink-conf.yaml
+set_config_key "taskmanager.memory.network.min" "111149056"
+set_config_key "taskmanager.memory.network.max" "111149056"
 
-set_conf_ssl
+set_conf_ssl "server"
 start_cluster
 start_taskmanagers 3
 

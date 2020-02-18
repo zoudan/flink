@@ -109,13 +109,10 @@ the best case is that the resulting JAR becomes excessively large, because it al
 dependencies. The worst case is that the Flink core dependencies that are added to the application's jar file
 clash with some of your own dependency versions (which is normally avoided through inverted classloading).
 
-**Note on IntelliJ:** To make the applications run within IntelliJ IDEA, the Flink dependencies need
-to be declared in scope *compile* rather than *provided*. Otherwise IntelliJ will not add them to the classpath and
-the in-IDE execution will fail with a `NoClassDefFountError`. To avoid having to declare the
-dependency scope as *compile* (which is not recommended, see above), the above linked Java- and Scala
-project templates use a trick: They add a profile that selectively activates when the application
-is run in IntelliJ and only then promotes the dependencies to scope *compile*, without affecting
-the packaging of the JAR files.
+**Note on IntelliJ:** To make the applications run within IntelliJ IDEA it is necessary to tick the
+`Include dependencies with "Provided" scope` box in the run configuration.
+If this option is not available (possibly due to using an older IntelliJ IDEA version), then a simple workaround
+is to create a test that calls the applications `main()` method.
 
 
 ## Adding Connector and Library Dependencies
@@ -162,10 +159,6 @@ pick the Scala version that matches their application's Scala version.
 Please refer to the [build guide]({{ site.baseurl }}/flinkDev/building.html#scala-versions)
 for details on how to build Flink for a specific Scala version.
 
-**Note:** Because of major breaking changes in Scala 2.12, Flink 1.5 currently builds only for Scala 2.11.
-We aim to add support for Scala 2.12 in the next versions.
-
-
 ## Hadoop Dependencies
 
 **General rule: It should never be necessary to add Hadoop dependencies directly to your application.**
@@ -196,47 +189,47 @@ you can use the following shade plugin definition:
 
 {% highlight xml %}
 <build>
-	<plugins>
-		<plugin>
-			<groupId>org.apache.maven.plugins</groupId>
-			<artifactId>maven-shade-plugin</artifactId>
-			<version>3.0.0</version>
-			<executions>
-				<execution>
-					<phase>package</phase>
-					<goals>
-						<goal>shade</goal>
-					</goals>
-					<configuration>
-						<artifactSet>
-							<excludes>
-								<exclude>com.google.code.findbugs:jsr305</exclude>
-								<exclude>org.slf4j:*</exclude>
-								<exclude>log4j:*</exclude>
-							</excludes>
-						</artifactSet>
-						<filters>
-							<filter>
-								<!-- Do not copy the signatures in the META-INF folder.
-								Otherwise, this might cause SecurityExceptions when using the JAR. -->
-								<artifact>*:*</artifact>
-								<excludes>
-									<exclude>META-INF/*.SF</exclude>
-									<exclude>META-INF/*.DSA</exclude>
-									<exclude>META-INF/*.RSA</exclude>
-								</excludes>
-							</filter>
-						</filters>
-						<transformers>
-							<transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-								<mainClass>my.programs.main.clazz</mainClass>
-							</transformer>
-						</transformers>
-					</configuration>
-				</execution>
-			</executions>
-		</plugin>
-	</plugins>
+    <plugins>
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-shade-plugin</artifactId>
+            <version>3.1.1</version>
+            <executions>
+                <execution>
+                    <phase>package</phase>
+                    <goals>
+                        <goal>shade</goal>
+                    </goals>
+                    <configuration>
+                        <artifactSet>
+                            <excludes>
+                                <exclude>com.google.code.findbugs:jsr305</exclude>
+                                <exclude>org.slf4j:*</exclude>
+                                <exclude>log4j:*</exclude>
+                            </excludes>
+                        </artifactSet>
+                        <filters>
+                            <filter>
+                                <!-- Do not copy the signatures in the META-INF folder.
+                                Otherwise, this might cause SecurityExceptions when using the JAR. -->
+                                <artifact>*:*</artifact>
+                                <excludes>
+                                    <exclude>META-INF/*.SF</exclude>
+                                    <exclude>META-INF/*.DSA</exclude>
+                                    <exclude>META-INF/*.RSA</exclude>
+                                </excludes>
+                            </filter>
+                        </filters>
+                        <transformers>
+                            <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                <mainClass>my.programs.main.clazz</mainClass>
+                            </transformer>
+                        </transformers>
+                    </configuration>
+                </execution>
+            </executions>
+        </plugin>
+    </plugins>
 </build>
 {% endhighlight %}
 

@@ -118,7 +118,7 @@ public class TypeSerializerSerializationUtil {
 		} catch (UnloadableTypeSerializerException e) {
 			if (useDummyPlaceholder) {
 				LOG.warn("Could not read a requested serializer. Replaced with a UnloadableDummyTypeSerializer.", e.getCause());
-				return new UnloadableDummyTypeSerializer<>(e.getSerializerBytes());
+				return new UnloadableDummyTypeSerializer<>(e.getSerializerBytes(), e.getCause());
 			} else {
 				throw e;
 			}
@@ -218,11 +218,23 @@ public class TypeSerializerSerializationUtil {
 				configSnapshot = TypeSerializerSnapshotSerializationUtil.readSerializerSnapshot(
 						bufferWrapper, userCodeClassLoader, serializer);
 
+				if (serializer instanceof LegacySerializerSnapshotTransformer) {
+					configSnapshot = transformLegacySnapshot(serializer, configSnapshot);
+				}
+
 				serializersAndConfigSnapshots.add(new Tuple2<>(serializer, configSnapshot));
 			}
 		}
 
 		return serializersAndConfigSnapshots;
+	}
+
+	@SuppressWarnings("unchecked")
+	private static <T, U> TypeSerializerSnapshot<T> transformLegacySnapshot(
+		TypeSerializer<T> serializer, TypeSerializerSnapshot<U> configSnapshot) {
+
+		LegacySerializerSnapshotTransformer<T> transformation = (LegacySerializerSnapshotTransformer<T>) serializer;
+		return transformation.transformLegacySerializerSnapshot(configSnapshot);
 	}
 
 	// -----------------------------------------------------------------------------------------------------
@@ -231,8 +243,6 @@ public class TypeSerializerSerializationUtil {
 	 * Utility serialization proxy for a {@link TypeSerializer}.
 	 */
 	public static final class TypeSerializerSerializationProxy<T> extends VersionedIOReadableWritable {
-
-		private static final Logger LOG = LoggerFactory.getLogger(TypeSerializerSerializationProxy.class);
 
 		private static final int VERSION = 1;
 
@@ -299,6 +309,37 @@ public class TypeSerializerSerializationUtil {
 		@Override
 		public int getVersion() {
 			return VERSION;
+		}
+	}
+
+	// ------------------------------------------------------------------------
+	//  utility exception
+	// ------------------------------------------------------------------------
+
+	/**
+	 * An exception thrown to indicate that a serializer cannot be read.
+	 * It wraps the cause of the read error, as well as the original bytes of the written serializer.
+	 */
+	@Internal
+	private static class UnloadableTypeSerializerException extends IOException {
+
+		private static final long serialVersionUID = 1L;
+
+		private final byte[] serializerBytes;
+
+		/**
+		 * Creates a new exception, with the cause of the read error and the original serializer bytes.
+		 *
+		 * @param cause the cause of the read error.
+		 * @param serializerBytes the original serializer bytes.
+		 */
+		public UnloadableTypeSerializerException(Exception cause, byte[] serializerBytes) {
+			super(cause);
+			this.serializerBytes = Preconditions.checkNotNull(serializerBytes);
+		}
+
+		public byte[] getSerializerBytes() {
+			return serializerBytes;
 		}
 	}
 }
